@@ -1,0 +1,5 @@
+timestamp, stack_id, alloc_count, symbol_path,
+1771714923.8293703,784,2,malloc;main;[unknown];__libc_start_main;_start
+1771714928.8419924,784,5,malloc;main;[unknown];__libc_start_main;_start
+1771714933.8580992,784,7,malloc;main;[unknown];__libc_start_main;_start
+1771714938.8778055,784,10,malloc;main;[unknown];__libc_start_main;_start
