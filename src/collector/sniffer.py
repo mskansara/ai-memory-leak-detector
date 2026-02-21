@@ -5,34 +5,34 @@ import time
 bpf_source = """
 #include <uapi/linux/ptrace.h>
 
-BPF_HASH(allocations, u64, u64);
+BPF_HASH(alloc_stacks, u64, int);
+
+BPF_STACK_TRACE(stack_traces, 1024);
 
 int trace_malloc_exit(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    if(pid != TARGET_PID) {
-        return 0;
-    } 
+    if(pid != TARGET_PID) return 0;
 
     u64 addr = PT_REGS_RC(ctx);
-    u64 size = 1024;
 
-    if(addr != 0) {
-        allocations.update(&addr, &size);
-    }
+    if (addr == 0) return 0;
+
+    int stack_id = stack_traces.get_stackid(ctx, BPF_F_USER_STACK);
+
+    alloc_stacks.update(&addr, &stack_id);
+
     return 0;
+
 }
 
 int trace_free_entry(struct pt_regs *ctx, void *addr) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    if(pid != TARGET_PID) {
-        return 0;
-    }
+    if (pid != TARGET_PID) return 0;
 
     u64 address = (u64)addr;
-    allocations.delete(&address);
+    alloc_stacks.delete(&address);
     return 0;
 }
-
 """
 
 if len(sys.argv) < 2:
@@ -53,16 +53,18 @@ print(f"Tracking leaks for PID {target_pid}....Press Ctrl+C to stop.")
 
 try:
     while True:
-        time.sleep(2)
+        time.sleep(5)
         print("--- Active Memory Blocks (Potential Leaks) ---")
-        count = 0
-        for addr, size in b["allocations"].items():
-            count += 1
-            print(f"Leaked Address: {hex(addr.value)} | Size: {size.value} bytes")
 
-        if count == 0:
-            print("No leaks detected yet. Everything is being freed.")
-        print(f"Total outstanding Blocks: {count}")
+        for addr, stack_id in b["alloc_stacks"].items():
+
+            print(f"Leaked Address: {hex(addr.value)}")
+            stack = b["stack_traces"].walk(stack_id.value)
+            for addr_in_stack in stack:
+                print(
+                    f"  -> {b.sym(addr_in_stack, int(target_pid)).decode('utf-8', 'replace')}"
+                )
+
 
 except KeyboardInterrupt:
     print("\\Detatching...")
