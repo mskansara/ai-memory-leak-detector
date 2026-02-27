@@ -12,11 +12,12 @@ def detect_leaks(file_path):
     df = pd.read_csv(file_path, names=columns)
     detected_paths = []
 
-    VELOCITY_THRESHOLD = 0.05
+    MIN_SAMPLES = 5
+    VELOCITY_THRESHOLD = 0.01
     CONFIDENCE_THRESHOLD = 0.85
 
     for (stack_id, symbol_path), group in df.groupby(["stack_id", "symbol_path"]):
-        if len(group) < 10:
+        if len(group) < MIN_SAMPLES:
             continue
 
         X = (group["timestamp"] - group["timestamp"].min()).values.reshape(-1, 1)
