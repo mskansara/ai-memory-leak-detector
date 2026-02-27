@@ -6,7 +6,7 @@ from ollama import Client
 def diagnosis_leak(symbol_path):
     ollama_host = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434")
     client = Client(host=ollama_host)
-    code_path = "./targets/target_app.cpp"
+    code_path = os.getenv("TARGET_SOURCE_PATH", "/app/targets/main.cpp")
 
     if not os.path.exists(code_path):
         print(
@@ -35,8 +35,7 @@ def diagnosis_leak(symbol_path):
 
     try:
         response = client.generate(model="llama3.2", prompt=prompt)
-        print("\n--- AI DIAGNOSIS ---")
-        print(response["response"])
+        return response["response"]
     except Exception as e:
         print(f"❌ Connection failed: {e}")
 
