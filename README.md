@@ -1,4 +1,4 @@
-# AI-Powered eBPF Memory Leak Detector
+## AI-Powered eBPF Memory Leak Detector
 
 This tool is designed for high-performance memory diagnostics in C++ applications. It identifies memory leaks in real-time by monitoring kernel allocation events via eBPF, analyzing the data using linear regression to find growth trends, and leveraging a local LLM to provide a root-cause diagnosis.
 
@@ -8,29 +8,41 @@ By moving the observation layer into the Linux kernel, the tool maintains less t
 
 ## Core Features
 
-- Low Overhead: eBPF-based monitoring avoids the 10x performance penalty of CPU emulation.
-- Statistical Filtering: Linear regression distinguishes between legitimate initialization bursts and genuine resource exhaustion.
-- Automated Diagnosis: Integrates with Ollama (Llama 3.2) to map kernel-level anomalies back to specific lines of C++ source code.
-- Unified CLI: A single orchestrator manages the collection, analysis, and reporting phases.
+* **Low Overhead:** eBPF-based monitoring avoids the 10x performance penalty of CPU emulation.
+* **Statistical Filtering:** Linear regression distinguishes between legitimate initialization bursts and genuine resource exhaustion.
+* **Automated Diagnosis:** Integrates with Ollama (Llama 3.2) to map kernel-level anomalies back to specific lines of C++ source code.
+* **Containerized Engine:** Fully portable Docker environment with automated kernel header mapping and host-gateway bridging for AI services.
+* **Unified Orchestration:** A single command-line interface manages the collection, analysis, and reporting phases.
 
 ---
 
 ## Requirements
 
-- Linux Kernel 5.0+ with BCC (BPF Compiler Collection) installed.
-- Python 3.10+
-- Ollama running locally with the Llama 3.2 model.
+* **Host:** Linux Kernel 5.0+ (or macOS via Lima VM).
+* **Virtualization:** Docker and Docker Compose (V2).
+* **AI Backend:** Ollama running on the host with the Llama 3.2 model.
 
 ---
 
-## Installation
+## Installation & Setup
 
-Because eBPF requires access to system-level libraries, create a virtual environment that can access system site packages:
+The tool is now containerized for portability, ensuring the BCC toolchain and LLVM dependencies are consistent across environments.
+
+### 1. Configure the AI Host
+
+To allow the container to communicate with the host's AI service, ensure Ollama is listening on all interfaces:
 
 ```bash
-python3 -m venv venv --system-site-packages
-source venv/bin/activate
-pip install -r requirements.txt
+# On your host terminal
+export OLLAMA_HOST=0.0.0.0
+ollama serve
+
+```
+
+### 2. Build the Detector
+
+```bash
+docker compose build
 
 ```
 
@@ -38,23 +50,29 @@ pip install -r requirements.txt
 
 ## Usage
 
-1. Compile and run your target C++ application to get its PID.
-2. Launch the detector with the unified CLI:
+1. Compile and run your target C++ application (e.g., in `targets/`) to obtain its PID.
+2. Launch the detector using Docker Compose:
 
 ```bash
-sudo ./venv/bin/python3 main.py [PID] --duration 60 --ai
+sudo docker compose run --rm detector [PID] --duration 60 --ai
 
 ```
 
-The tool will sniff kernel events for the specified duration, run the ML detection engine on the resulting telemetry, and trigger the AI agent if any leaks are confirmed.
+The tool will:
+
+* **Sniff:** Hook into the kernel to track `malloc` events for the target PID.
+* **Detect:** Apply Scikit-learn regression models to telemetry stored in shared volumes.
+* **Diagnose:** Bridge to the host-based LLM to perform source-code level analysis of confirmed leaks.
 
 ---
 
 ## Project Structure
 
-- main.py: The central entry point for the tool.
-- src/collector: Contains the eBPF C probes and Python sniffer logic.
-- src/analysis: Contains the Scikit-learn detection model and AI diagnostic agent.
-- targets: Includes sample C++ applications with intentional leaks for testing.
+* `main.py`: The central orchestrator for the sniffing and analysis pipeline.
+* `src/collector`: Contains eBPF C probes and Python sniffer logic.
+* `src/analysis`: Contains the Scikit-learn detection model and the AI diagnostic agent.
+* `targets/`: Includes sample C++ applications with intentional leaks for testing.
+* `Dockerfile`: Defines the portable kernel-tracing environment.
+* `docker-compose.yml`: Manages privileged permissions, PID namespace sharing, and networking bridges.
 
 ---
