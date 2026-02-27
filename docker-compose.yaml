@@ -1,0 +1,16 @@
+services:
+  detector:
+    build: .
+    image: leak-detector:v1
+    privileged: true
+    pid: "host"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OLLAMA_HOST_URL=http://192.168.5.2:11434
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - /usr/src:/usr/src:ro
+      - /sys/kernel/debug:/sys/kernel/debug:rw
+      - ./data:/app/data
+      - ./targets:/app/targets

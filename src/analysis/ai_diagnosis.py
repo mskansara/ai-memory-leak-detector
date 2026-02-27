@@ -4,11 +4,15 @@ from ollama import Client
 
 
 def diagnosis_leak(symbol_path):
-    client = Client(host="http://host.lima.internal:11434")
+    ollama_host = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434")
+    client = Client(host=ollama_host)
     code_path = "./targets/target_app.cpp"
 
     if not os.path.exists(code_path):
-        return "Source code not found."
+        print(
+            f"\n AI DIAGNOSIS ERROR: Source code not found at {code_path} inside the container!"
+        )
+        return
 
     with open(code_path, "r") as f:
         source_code = f.read()

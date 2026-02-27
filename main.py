@@ -29,6 +29,8 @@ def main():
     if leaks and args.ai:
         for leak in leaks:
             diagnosis_leak(leak)
+    else:
+        print("\n[!] Phase 2 found no leaks to analyze via AI.")
 
 
 if __name__ == "__main__":
