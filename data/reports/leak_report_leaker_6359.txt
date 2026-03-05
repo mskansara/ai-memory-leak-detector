@@ -1,0 +1,80 @@
+**Step 1: Pinpoint the exact function and line number responsible for the leak.**
+
+The code provided has a deliberate leak in the `deliberate_leak` function, where 1MB of memory is allocated using `malloc`, but not freed. This is the function responsible for the leak.
+
+The line number responsible for the leak is:
+
+`char *buffer = (char *)malloc(1024 * 1024);`
+
+This line of code allocates 1MB of memory and stores the pointer in the `buffer` variable. This is the point where the memory leak occurs.
+
+**Step 2: Analyze the 'eBPF Stack Trace' provided and explain how it maps to the C++ logic.**
+
+The eBPF stack trace shows the following functions:
+
+1. `malloc`
+2. `main`
+3. `[unknown]` (this is not part of the original C++ code)
+4. `__libc_start_main`
+5. `_start`
+
+The eBPF stack trace maps to the C++ logic as follows:
+
+1. `malloc`: This is the function that allocates the memory in the `deliberate_leak` function.
+2. `main`: This is the main entry point of the program, where the `deliberate_leak` function is called repeatedly.
+3. `[unknown]`: This is not part of the original C++ code, but it's likely a placeholder for the eBPF instrumentation that collected the stack trace.
+4. `__libc_start_main`: This is the entry point of the C standard library, which is called when the program starts. The `deliberate_leak` function is called from this point.
+5. `_start`: This is the entry point of the program, which is called when the kernel boots. The `deliberate_leak` function is called from this point.
+
+**Step 3: Explain the impact: based on the 'Leak Velocity', how quickly will this process crash the system?**
+
+The leak velocity is 0.5067 units/sec, which means that the process is leaking 0.5067 units of memory every second. To estimate the impact of this leak on the system, we need to consider the total amount of memory leaked and the rate at which the system can recover from memory depletion.
+
+Assuming a 64-bit system with a memory size of 4 GB, and considering the leak velocity, we can estimate the time it takes for the system to run out of memory.
+
+Let's assume that the system can recover from memory depletion by allocating new memory from the swap partition. If we assume a swap size of 1 GB, we can estimate the time it takes for the system to run out of memory as follows:
+
+Total memory size: 4 GB
+Swap size: 1 GB
+Leak velocity: 0.5067 units/sec
+
+Time to run out of memory = Total memory size / Swap size
+Time to run out of memory = 4 GB / 1 GB
+Time to run out of memory = 4 seconds
+
+Therefore, the process will likely crash the system after approximately 4 seconds, assuming the system runs out of swap space.
+
+**Step 4: Provide the production-ready C++ fix for the identified function.**
+
+The fix for the identified function is to free the memory allocated in the `deliberate_leak` function after it's no longer needed.
+
+Here's the corrected code:
+
+```cpp
+void deliberate_leak()
+{
+    // We allocate 1MB and "forget" to delete it
+    char *buffer = (char *)malloc(1024 * 1024);
+    std::memset(buffer, 1, 1024 * 1024);
+    std::cout << "[Target] Leaked 1MB at address: " << (void *)buffer << std::endl;
+
+    // Free the memory when we're done with it
+    delete[] buffer;
+}
+```
+
+In this corrected version, we use the `delete[]` operator to free the memory allocated in the `buffer` variable. This ensures that the memory is properly deallocated and doesn't leak.
+
+Note that in modern C++ (C++11 and later), it's recommended to use smart pointers (like `std::unique_ptr`) to manage memory instead of manual `malloc` and `delete`. This can help prevent memory leaks and make the code more exception-safe.
+
+```cpp
+void deliberate_leak()
+{
+    // We allocate 1MB and "forget" to delete it
+    std::unique_ptr<char[]> buffer(new char[1024 * 1024]);
+    std::memset(buffer.get(), 1, 1024 * 1024);
+    std::cout << "[Target] Leaked 1MB at address: " << buffer.get() << std::endl;
+}
+```
+
+In this version, we use a `std::unique_ptr` to manage the memory allocated for the `buffer` variable. The `std::unique_ptr` automatically frees the memory when it goes out of scope, preventing the memory leak.

@@ -2,94 +2,106 @@ from bcc import BPF  # type: ignore
 import time
 import pandas as pd  # type: ignore
 import os
+import platform
 
 
-def start_sniffing(target_pid, duration, output_path):
-    print(f"[*] Verifying visibility of PID {target_pid}...")
-    if not os.path.exists(f"/proc/{target_pid}"):
-        print(f"❌ ERROR: PID {target_pid} is not visible to this container!")
-        print("    Check if 'pid: host' is in your docker-compose.yml.")
-        return
+def start_sniffing(duration, output_path):
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("")
+        f.write("timestamp,pid,stack_id,alloc_count,symbol_path\n")
 
-    print(f"[*] Created telemetry file at {output_path}")
+    print(f"[*] Global Watcher initialized. Telemetry: {output_path}")
 
     bpf_source = """
     #include <uapi/linux/ptrace.h>
-    BPF_HASH(stack_counts, int, u64);
+
+    struct key_t {
+        u32 pid;
+        int stack_id;
+    };
+    BPF_HASH(stack_counts, struct key_t, u64);
     BPF_STACK_TRACE(stack_traces, 1024);
 
     int trace_alloc_entry(struct pt_regs *ctx) {
         u32 pid = bpf_get_current_pid_tgid() >> 32;
-        if(pid != TARGET_PID) return 0;
+        
+        u32 self_pid = SELF_PID_FILTER;
+        if(pid == self_pid) return 0;
 
-        int stack_id = stack_traces.get_stackid(ctx, BPF_F_USER_STACK);
-        if (stack_id < 0) return 0;
+        struct key_t key = {};
+        key.pid = pid;
+        key.stack_id = stack_traces.get_stackid(ctx, BPF_F_USER_STACK);
+        if (key.stack_id < 0) return 0;
 
-        u64 *count = stack_counts.lookup(&stack_id);
+        u64 *count = stack_counts.lookup(&key);
         if(count) {
             (*count)++;
         } else {
             u64 initial_val = 1;
-            stack_counts.update(&stack_id, &initial_val);
+            stack_counts.update(&key, &initial_val);
         }
         return 0;
     }
-    """.replace(
-        "TARGET_PID", str(target_pid)
-    )
-
+    """
+    self_pid = os.getpid()
+    bpf_source = bpf_source.replace("SELF_PID_FILTER", str(self_pid))
     b = BPF(text=bpf_source)
-    target_libc = f"/proc/{target_pid}/root/lib/aarch64-linux-gnu/libc.so.6"
-    target_stdcpp = f"/proc/{target_pid}/root/lib/aarch64-linux-gnu/libstdc++.so.6"
+
+    arch = platform.machine()
+    lib_prefix = (
+        "/usr/lib/x86_64-linux-gnu"
+        if arch == "x86_64"
+        else "/usr/lib/aarch64-linux-gnu"
+    )
+    libc_path = f"{lib_prefix}/libc.so.6"
+    stdcpp_path = f"{lib_prefix}/libstdc++.so.6"
 
     try:
-        b.attach_uprobe(name=target_libc, sym="malloc", fn_name="trace_alloc_entry")
-        b.attach_uprobe(name=target_stdcpp, sym="_Znam", fn_name="trace_alloc_entry")
-        print(f"[*] Probes locked onto {target_libc}")
+        b.attach_uprobe(name="c", sym="malloc", fn_name="trace_alloc_entry")
+        b.attach_uprobe(name="stdc++", sym="_Znwm", fn_name="trace_alloc_entry")  # new
+        b.attach_uprobe(name="stdc++", sym="_Znam", fn_name="trace_alloc_entry")
+        print(f"[*] Global Probes locked onto libc and libstdc++")
     except Exception as e:
-        print(f"[*] Fallback: Attempting generic 'c' and 'stdc++' library names...")
-        try:
-            b.attach_uprobe(name="c", sym="malloc", fn_name="trace_alloc_entry")
-            b.attach_uprobe(name="stdc++", sym="_Znam", fn_name="trace_alloc_entry")
-        except:
-            print(f"❌ FATAL: Library not found: {e}")
-            return
-
-    print(f"[*] Monitoring PID {target_pid} for {duration} seconds...")
+        print(f"❌ FATAL: Could not attach global probes: {e}")
+        return
+    print(f"[*] Monitoring system-wide allocations for {duration} seconds...")
+    start_time = time.time()
     start_time = time.time()
 
     while time.time() - start_time < duration:
         try:
-            time.sleep(2)
+            time.sleep(5)
 
             counts = b["stack_counts"]
-            items_found = len(list(counts.items()))  # Check if the map has ANY data
-            print(
-                f"   [HEARTBEAT] {int(time.time() - start_time)}s | Stacks in Map: {items_found}"
-            )
+            stack_traces = b["stack_traces"]
             batch_data = []
+            current_ts = time.time()
 
-            for stack_id, count in counts.items():
-                stack = b["stack_traces"].walk(stack_id.value)
-                # Symbol resolution: this is the 'heavy' part
-                syms = [
-                    b.sym(a, int(target_pid)).decode("utf-8", "replace") for a in stack
-                ]
+            for key, count in counts.items():
+                pid = key.pid
+                stack_id = key.stack_id
+
+                stack = stack_traces.walk(stack_id)
+
+                syms = []
+                for addr in stack:
+                    sym = b.sym(addr, pid).decode("utf-8", "replace")
+                    syms.append(sym)
+
                 path_string = ";".join(syms)
-                batch_data.append(
-                    [time.time(), stack_id.value, count.value, path_string]
-                )
+
+                batch_data.append([current_ts, pid, stack_id, count.value, path_string])
 
             if batch_data:
-                df = pd.DataFrame(batch_data)
-                # Fix: Ensure we use a clean CSV format and force the write to disk
+                df = pd.DataFrame(
+                    batch_data
+                )  # Fix: Ensure we use a clean CSV format and force the write to disk
                 df.to_csv(output_path, mode="a", index=False, header=False, sep=",")
-                # Senior Tip: Print a heartbeat so we know the 'Producer' is working
                 os.sync()
-                print(f"[*] Flushed {len(batch_data)} telemetry rows to {output_path}")
+                print(
+                    f"   [HEARTBEAT] {int(time.time() - start_time)}s | Tracked {len(batch_data)} active allocation paths across system."
+                )
 
         except KeyboardInterrupt:
             break

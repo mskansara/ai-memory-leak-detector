@@ -3,7 +3,13 @@ services:
   detector:
     build: .
     image: leak-detector:v1 
-    privileged: true
+    priviledged: false
+    cap_add:
+      - SYS_ADMIN
+      - BPF
+      - PERFMON
+    security_opt:
+      - label:disable
     pid: "host"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -11,12 +17,10 @@ services:
       - OLLAMA_HOST_URL=http://192.168.5.2:11434
       - TARGET_SOURCE_PATH=/app/targets/leaker.cpp
     volumes:
-      # ONLY mount the specific kernel/eBPF folders needed
       - /lib/modules:/lib/modules:ro
       - /usr/src:/usr/src:ro
       - /sys/kernel/debug:/sys/kernel/debug:rw
       - /proc:/proc:ro
-      # Mount your project folders
       - ./data:/app/data
       - ./targets:/app/targets
       - ./src:/app/src
@@ -25,8 +29,8 @@ services:
   # The Frontend (Consumer)
   dashboard:
     image: leak-detector:v1 
-    privileged: true # REQUIRED for eBPF
     pid: "host"
+    priviledged: false
     entrypoint: []
     command: streamlit run src/dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     ports:
