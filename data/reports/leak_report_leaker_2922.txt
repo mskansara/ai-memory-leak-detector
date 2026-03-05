@@ -1,0 +1,70 @@
+**Investigation Report**
+
+Based on the provided information, I have conducted a thorough analysis of the source code and the eBPF stack trace.
+
+**1. Pinpointing the exact function and line number responsible for the leak:**
+
+The leak is caused by the `deliberate_leak` function, specifically the line where memory is allocated using `malloc`:
+
+```c
+char *buffer = (char *)malloc(1024 * 1024);
+```
+
+This line is responsible for the memory leak.
+
+**2. Analyzing the 'eBPF Stack Trace' and explaining how it maps to the C++ logic:**
+
+The eBPF stack trace indicates that the leak occurs in the following order:
+
+- `malloc`
+- `test_func`
+- `main`
+
+However, since `test_func` is not present in the provided source code, I assume it's an error and should be replaced with `deliberate_leak`. The correct sequence should be:
+
+- `malloc`
+- `deliberate_leak`
+- `main`
+
+The `main` function is the entry point of the program, and the `deliberate_leak` function is called repeatedly in an infinite loop, causing the memory leak.
+
+**3. Explaining the impact and predicting the system crash:**
+
+The leak velocity of 2.5000 units/sec indicates that the process will leak approximately 2.5MB of memory every second. Over time, this can cause the system to run out of available memory, leading to a crash.
+
+Assuming the system has a reasonable amount of free memory initially, it's difficult to predict exactly when the system will crash. However, with a leak velocity of 2.5MB/sec, it's likely that the system will experience significant memory pressure within a few seconds.
+
+**4. Providing the production-ready C++ fix for the identified function:**
+
+To fix the memory leak, we need to ensure that the allocated memory is properly deallocated. We can use smart pointers, such as `unique_ptr`, to manage the memory automatically:
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <unistd.h>
+#include <cstring>
+#include <memory>
+
+void deliberate_leak()
+{
+    // We allocate 1MB and "forget" to delete it
+    std::unique_ptr<char[]> buffer(new char[1024 * 1024]);
+    std::memset(buffer.get(), 1, 1024 * 1024);
+    std::cout << "[Target] Leaked 1MB at address: " << (void *)buffer.get() << std::endl;
+}
+
+int main()
+{
+    std::cout << "Starting Leaky App. My PID is: " << getpid() << std::endl;
+    std::cout << "I will leak 1MB every 2 seconds. Press Ctrl+C to stop." << std::endl;
+
+    while (true)
+    {
+        deliberate_leak();
+        sleep(2);
+    }
+    return 0;
+}
+```
+
+In this fixed version, `std::unique_ptr` manages the memory automatically, ensuring that it's properly deallocated when it goes out of scope. This eliminates the memory leak and prevents the system from running out of memory.

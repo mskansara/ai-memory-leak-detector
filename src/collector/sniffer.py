@@ -3,15 +3,28 @@ import time
 import pandas as pd  # type: ignore
 import os
 import platform
+from prometheus_client import start_http_server, Gauge
+
+ALLOC_GAUGE = Gauge(
+    "ebpf_memory_allocations_total",
+    "Total memory allocations tracked by eBPF",
+    ["pid", "process_name", "stack_id", "symbol_path"],
+)
 
 
-def start_sniffing(duration, output_path):
+def get_process_name(pid):
+    try:
+        with open(f"/proc/{pid}/comm", "r") as f:
+            return f.read().strip()
+    except:
+        return "unknown"
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w") as f:
-        f.write("timestamp,pid,stack_id,alloc_count,symbol_path\n")
 
-    print(f"[*] Global Watcher initialized. Telemetry: {output_path}")
+def start_sniffing(duration, output_path=None):
+
+    print("[*] Initializing Prometheus Exporter on port 8000...")
+    # 2. Start the HTTP server for Prometheus to scrape
+    start_http_server(8000, addr="0.0.0.0")
 
     bpf_source = """
     #include <uapi/linux/ptrace.h>
@@ -59,7 +72,7 @@ def start_sniffing(duration, output_path):
 
     try:
         b.attach_uprobe(name="c", sym="malloc", fn_name="trace_alloc_entry")
-        b.attach_uprobe(name="stdc++", sym="_Znwm", fn_name="trace_alloc_entry")  # new
+        b.attach_uprobe(name="stdc++", sym="_Znwm", fn_name="trace_alloc_entry")
         b.attach_uprobe(name="stdc++", sym="_Znam", fn_name="trace_alloc_entry")
         print(f"[*] Global Probes locked onto libc and libstdc++")
     except Exception as e:
@@ -81,7 +94,7 @@ def start_sniffing(duration, output_path):
             for key, count in counts.items():
                 pid = key.pid
                 stack_id = key.stack_id
-
+                proc_name = get_process_name(pid)
                 stack = stack_traces.walk(stack_id)
 
                 syms = []
@@ -91,17 +104,15 @@ def start_sniffing(duration, output_path):
 
                 path_string = ";".join(syms)
 
-                batch_data.append([current_ts, pid, stack_id, count.value, path_string])
-
-            if batch_data:
-                df = pd.DataFrame(
-                    batch_data
-                )  # Fix: Ensure we use a clean CSV format and force the write to disk
-                df.to_csv(output_path, mode="a", index=False, header=False, sep=",")
-                os.sync()
-                print(
-                    f"   [HEARTBEAT] {int(time.time() - start_time)}s | Tracked {len(batch_data)} active allocation paths across system."
-                )
+                ALLOC_GAUGE.labels(
+                    pid=pid,
+                    process_name=proc_name,
+                    stack_id=stack_id,
+                    symbol_path=path_string,
+                ).set(count.value)
+            print(
+                f"   [PROMETHEUS] Heartbeat: Metrics updated for {len(counts)} paths."
+            )
 
         except KeyboardInterrupt:
             break

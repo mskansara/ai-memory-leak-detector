@@ -1,0 +1,12 @@
+groups:
+  - name: memory_leak_alerts
+    rules:
+      - alert: HighMemoryAllocationVelocity
+        expr: deriv(ebpf_memory_allocations_total[2m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          component: ebpf-sniffer
+        annotations:
+          summary: "Potential Memory Leak detected in {{ $labels.process_name }}"
+          description: "PID {{ $labels.pid }} is allocating memory at a steady rate. Symbol Path: {{ $labels.symbol_path }}"
