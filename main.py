@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="🛡️ Guardian eBPF: Autonomous Memory Leak Detector (Phase 1)"
     )
-    # Refactor: PID is no longer a required positional argument
+
     parser.add_argument(
         "--duration",
         type=int,
