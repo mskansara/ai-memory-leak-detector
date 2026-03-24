@@ -1,25 +1,17 @@
 #include <iostream>
-#include <vector>
 #include <unistd.h>
-#include <cstring>
-
-void deliberate_leak()
-{
-    // We allocate 1MB and "forget" to delete it
-    char *buffer = (char *)malloc(1024 * 1024);
-    std::memset(buffer, 1, 1024 * 1024);
-    std::cout << "[Target] Leaked 1MB at address: " << (void *)buffer << std::endl;
-}
 
 int main()
 {
-    std::cout << "Starting Leaky App. My PID is: " << getpid() << std::endl;
-    std::cout << "I will leak 1MB every 2 seconds. Press Ctrl+C to stop." << std::endl;
+    std::cout << "🚀 Leaker started. PID: " << getpid() << std::endl;
 
-    while (true)
+    // Leak 1MB every second for 5 minutes
+    for (int i = 0; i < 300; i++)
     {
-        deliberate_leak();
-        sleep(2);
+        int *leak = new int[250000]; // ~1MB
+        leak[0] = i;                 // Ensure memory is actually touched
+        std::cout << "Iteration " << i << ": Leaked 1MB..." << std::endl;
+        sleep(1);
     }
     return 0;
 }

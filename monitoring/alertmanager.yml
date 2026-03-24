@@ -1,11 +1,11 @@
 route:
   receiver: "ai-webhook"
   group_by: ["process_name", "pid"]
-  group_wait: 10s
+  group_wait: 5s
   group_interval: 1m
   repeat_interval: 1h
 
 receivers:
   - name: "ai-webhook"
     webhook_configs:
-      - url: "http://localhost:5001/webhook"
+      - url: "http://agent:5001/webhook"

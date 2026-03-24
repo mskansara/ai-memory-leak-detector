@@ -54,7 +54,7 @@ with col_controls:
     st.subheader("Controls")
 
     if not st.session_state.is_sniffing:
-        if st.button("🚀 Start Live Capture", type="primary"):
+        if st.button("Start Live Capture", type="primary"):
             st.session_state.is_sniffing = True
             DATA_PATH = "./data/memory_telemetry.csv"
 
@@ -67,12 +67,12 @@ with col_controls:
                 start_sniffing(target_pid, duration, DATA_PATH)
 
             thread = threading.Thread(target=run_capture)
-            add_script_run_ctx(thread)  # Keep Streamlit context inside the thread
+            add_script_run_ctx(thread)
             thread.start()
 
             # 3. UI Sync & Progress Bar
             with col_stats:
-                st.write(f"### 📡 Capturing PID `{target_pid}`...")
+                st.write(f"### Capturing PID `{target_pid}`...")
                 progress_bar = st.progress(0, text="Initializing eBPF Probe...")
 
                 start_t = time.time()
@@ -83,15 +83,15 @@ with col_controls:
                     progress_bar.progress(
                         pct, text=f"Capturing Data... ({int(elapsed)}s / {duration}s)"
                     )
-                    time.sleep(1)  # Refresh UI every 1 second
+                    time.sleep(1)
 
                 progress_bar.progress(100, text="Capture Complete!")
-                time.sleep(1)  # Brief pause for UX so user sees 100%
+                time.sleep(1)
 
             st.session_state.is_sniffing = False
-            st.rerun()  # Refresh the page to show results
+            st.rerun()
     else:
-        st.warning("⚠️ Sniffer is currently locking the kernel...")
+        st.warning("Sniffer is currently locking the kernel...")
 
 # --- Visualization Section ---
 DATA_PATH = "./data/memory_telemetry.csv"
@@ -119,13 +119,13 @@ if os.path.exists(DATA_PATH) and os.path.getsize(DATA_PATH) > 0:
 
     # --- Analysis Section ---
     st.divider()
-    if st.button("🧠 Run AI Diagnosis"):
-        with st.spinner("🤖 Consulting AI Agent..."):
+    if st.button("Run AI Diagnosis"):
+        with st.spinner("Consulting AI Agent..."):
             leaks = detect_leaks(DATA_PATH)
             if leaks:
                 st.error(f"Leak Found in {len(leaks)} paths!")
-                diagnosis = diagnosis_leak(leaks[0])  # Get the primary leak
-                st.markdown("### 📝 Root Cause Report")
+                diagnosis = diagnosis_leak(leaks[0])
+                st.markdown("### Root Cause Report")
                 st.info(diagnosis)
             else:
                 st.success("No linear memory growth patterns detected.")
