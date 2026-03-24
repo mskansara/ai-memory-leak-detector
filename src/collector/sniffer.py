@@ -71,15 +71,21 @@ def start_sniffing(duration, output_path=None):
     stdcpp_path = f"{lib_prefix}/libstdc++.so.6"
 
     try:
+        # Most common path in Lima/Ubuntu
+        libc_path = "/lib/x86_64-linux-gnu/libc.so.6"
+        std_path = "/lib/x86_64-linux-gnu/libstdc++.so.6"
+
+        b.attach_uprobe(name=libc_path, sym="malloc", fn_name="trace_alloc_entry")
+        b.attach_uprobe(
+            name=std_path, sym="_Znam", fn_name="trace_alloc_entry"
+        )  # new[]
+        b.attach_uprobe(name=std_path, sym="_Znwm", fn_name="trace_alloc_entry")  # new
+        print(f"Probes locked onto {libc_path}")
+    except:
+        # Fallback to defaults if paths differ
         b.attach_uprobe(name="c", sym="malloc", fn_name="trace_alloc_entry")
-        b.attach_uprobe(name="stdc++", sym="_Znwm", fn_name="trace_alloc_entry")
         b.attach_uprobe(name="stdc++", sym="_Znam", fn_name="trace_alloc_entry")
-        print(f"[*] Global Probes locked onto libc and libstdc++")
-    except Exception as e:
-        print(f"❌ FATAL: Could not attach global probes: {e}")
-        return
-    print(f"[*] Monitoring system-wide allocations for {duration} seconds...")
-    start_time = time.time()
+        print(f"[*] Monitoring system-wide allocations for {duration} seconds...")
     start_time = time.time()
 
     while time.time() - start_time < duration:
@@ -88,8 +94,6 @@ def start_sniffing(duration, output_path=None):
 
             counts = b["stack_counts"]
             stack_traces = b["stack_traces"]
-            batch_data = []
-            current_ts = time.time()
 
             for key, count in counts.items():
                 pid = key.pid

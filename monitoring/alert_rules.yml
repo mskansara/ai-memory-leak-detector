@@ -1,0 +1,11 @@
+groups:
+  - name: memory_leak_alerts
+    rules:
+      - alert: HighMemoryAllocationVelocity
+        expr: deriv(ebpf_memory_allocations_total[2m]) > 0.1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Leak detected in {{ $labels.process_name }}"
+          value: "{{ $value }}"

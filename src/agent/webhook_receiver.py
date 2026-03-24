@@ -3,7 +3,9 @@ import os
 import sys
 
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(src_path)
+
 from analysis.ai_diagnosis import diagnosis_leak
 
 
@@ -21,23 +23,21 @@ def alert_webhook():
                 "pid": labels.get("pid"),
                 "process_name": labels.get("process_name"),
                 "symbol_path": labels.get("symbol_path"),
-                "confidence": 0.95,  # High confidence if Prometheus fired
+                "confidence": 0.95,
                 "velocity": float(alert["annotations"].get("value", 0)),
             }
 
             print(
-                f"🚨 ALERT RECEIVED: Memory leak in {leak_info['process_name']} (PID: {leak_info['pid']})"
+                f"ALERT RECEIVED: Memory leak in {leak_info['process_name']} (PID: {leak_info['pid']})"
             )
 
-            print("🤖 AI Agent is analyzing source code...")
+            print("AI Agent is analyzing source code...")
             report = diagnosis_leak(leak_info)
 
             if report:
-                print(
-                    f"✅ AI Diagnosis complete! Report saved for PID {leak_info['pid']}"
-                )
+                print(f"AI Diagnosis complete! Report saved for PID {leak_info['pid']}")
             else:
-                print("❌ AI Diagnosis failed.")
+                print("AI Diagnosis failed.")
 
     return jsonify({"status": "received"}), 200
 
